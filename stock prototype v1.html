@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>日常管家 - 穩定同步版</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap');
+        body { font-family: 'Noto Sans TC', sans-serif; background-color: #f3f4f6; }
+        .glass-card { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border-radius: 1rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+        .nav-btn.active { background-color: #4f46e5; color: white; }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+    <div class="max-w-5xl mx-auto">
+        <header class="mb-6 text-center">
+            <h1 class="text-3xl font-bold text-indigo-600">日常管家系統</h1>
+            <p class="text-gray-500">穩定使用版 (A子, B子, GULU)</p>
+        </header>
+
+        <!-- 導航列 -->
+        <div class="flex justify-center mb-8 gap-2 flex-wrap">
+            <button onclick="switchTab('expense')" id="btn-expense" class="nav-btn active px-5 py-2 rounded-full transition font-medium">💰 開支</button>
+            <button onclick="switchTab('inventory')" id="btn-inventory" class="nav-btn px-5 py-2 rounded-full bg-white transition font-medium">📦 存貨</button>
+            <button onclick="switchTab('sync')" id="btn-sync" class="nav-btn px-5 py-2 rounded-full bg-white transition font-medium">🔄 同步中心</button>
+        </div>
+
+        <!-- 1. 開支分頁 -->
+        <div id="tab-expense" class="tab-content">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div class="lg:col-span-1 glass-card p-6 h-fit">
+                    <h2 class="text-xl font-semibold mb-4">新增支出</h2>
+                    <form id="expenseForm" class="space-y-4">
+                        <input type="number" id="amount" required step="0.1" class="w-full p-2 border rounded-md" placeholder="金額 (HKD)">
+                        <select id="member" class="w-full p-2 border rounded-md">
+                            <option value="A子">👤 A子</option>
+                            <option value="B子">👤 B子</option>
+                            <option value="GULU">🐾 GULU</option>
+                        </select>
+                        <select id="category" class="w-full p-2 border rounded-md">
+                            <option value="餐飲">🍔 餐飲</option><option value="交通">🚌 交通</option>
+                            <option value="購物">🛍️ 購物</option><option value="Facial">🧖‍♀️ Facial</option>
+                            <option value="Gym">💪 Gym</option><option value="股票">📈 股票</option>
+                            <option value="其他">✨ 其他</option>
+                        </select>
+                        <input type="text" id="note" class="w-full p-2 border rounded-md" placeholder="備註">
+                        <button type="submit" class="w-full bg-indigo-600 text-white py-2 rounded-md hover:bg-indigo-700">紀錄支出</button>
+                    </form>
+                </div>
+                <div class="lg:col-span-2 space-y-6">
+                    <div class="glass-card p-6 flex flex-col md:flex-row items-center gap-6">
+                        <div class="w-full md:w-1/2 h-48"><canvas id="expenseChart"></canvas></div>
+                        <div class="w-full md:w-1/2 text-center md:text-left">
+                            <p class="text-sm text-gray-500">本月總開支</p>
+                            <p id="totalDisplay" class="text-3xl font-bold text-indigo-600">HK$ 0</p>
+                            <div id="memberSummary" class="mt-2 text-xs italic text-gray-500"></div>
+                        </div>
+                    </div>
+                    <div class="glass-card p-6">
+                        <div class="flex justify-between items-center mb-4">
+                            <h2 class="font-bold">歷史紀錄</h2>
+                            <button onclick="exportExcel('expense')" class="text-xs bg-indigo-50 text-indigo-600 px-3 py-1 rounded-md border">匯出 Excel</button>
+                        </div>
+                        <div class="overflow-x-auto text-sm">
+                            <table class="w-full text-left">
+                                <tbody id="expenseBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. 存貨分頁 -->
+        <div id="tab-inventory" class="tab-content hidden">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div class="lg:col-span-1 glass-card p-6 h-fit">
+                    <h2 class="text-xl font-semibold mb-4">新增存貨</h2>
+                    <form id="inventoryForm" class="space-y-4">
+                        <input type="text" id="invName" required class="w-full p-2 border rounded-md" placeholder="物品名稱">
+                        <select id="invLoc" class="w-full p-2 border rounded-md">
+                            <option value="廚房">🍳 廚房</option><option value="浴室">🚿 浴室</option>
+                            <option value="雪櫃">❄️ 雪櫃</option><option value="儲物櫃">🚪 儲物櫃</option>
+                        </select>
+                        <input type="number" id="invQty" required class="w-full p-2 border rounded-md" placeholder="數量">
+                        <button type="submit" class="w-full bg-emerald-600 text-white py-2 rounded-md hover:bg-emerald-700">加入存貨</button>
+                    </form>
+                </div>
+                <div class="lg:col-span-2 glass-card p-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="font-bold">存貨明細</h2>
+                        <button onclick="exportExcel('inventory')" class="text-xs bg-emerald-50 text-emerald-600 px-3 py-1 rounded-md border">匯出 Excel</button>
+                    </div>
+                    <div id="inventoryGrid" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. 同步中心分頁 -->
+        <div id="tab-sync" class="tab-content hidden">
+            <div class="glass-card p-8 max-w-2xl mx-auto text-center">
+                <h2 class="text-2xl font-bold mb-4 text-indigo-600">🔄 家園同步中心</h2>
+                <p class="text-gray-600 mb-6 text-sm">因為這不是正式 App，如果您要在 A子、B子的手機間同步資料，請使用以下代碼：</p>
+                
+                <div class="space-y-6">
+                    <div class="p-4 bg-gray-50 rounded-lg">
+                        <h3 class="font-bold mb-2">步驟 1：輸出資料 (分享給家人)</h3>
+                        <button onclick="generateSyncCode()" class="bg-indigo-600 text-white px-6 py-2 rounded-md mb-2">產生同步代碼</button>
+                        <textarea id="syncOutput" readonly class="w-full h-24 p-2 text-xs border rounded-md bg-white mb-2" placeholder="產生的代碼會出現在這裡..."></textarea>
+                        <p class="text-xs text-gray-400">產生後複製這段代碼，傳送到家人的 WhatsApp 紀錄即可。</p>
+                    </div>
+
+                    <div class="p-4 bg-gray-50 rounded-lg">
+                        <h3 class="font-bold mb-2">步驟 2：匯入資料 (接收紀錄)</h3>
+                        <textarea id="syncInput" class="w-full h-24 p-2 text-xs border rounded-md bg-white mb-2" placeholder="請將家人傳給您的代碼貼在這裡..."></textarea>
+                        <button onclick="importSyncCode()" class="bg-emerald-600 text-white px-6 py-2 rounded-md">匯入並更新紀錄</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast" class="fixed bottom-10 left-1/2 -translate-x-1/2 bg-gray-800 text-white px-6 py-2 rounded-full opacity-0 transition-opacity"></div>
+
+    <script>
+        // 核心數據
+        let state = {
+            expenses: JSON.parse(localStorage.getItem('gulu_expenses')) || [],
+            inventory: JSON.parse(localStorage.getItem('gulu_inventory')) || []
+        };
+
+        let chartObj = null;
+
+        window.onload = () => renderAll();
+
+        function switchTab(tab) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.getElementById(`tab-${tab}`).classList.remove('hidden');
+            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active', 'bg-indigo-600', 'text-white'));
+            const activeBtn = document.getElementById(`btn-${tab}`);
+            activeBtn.classList.add('active', 'bg-indigo-600', 'text-white');
+            if(tab === 'expense') renderChart();
+        }
+
+        function showToast(msg) {
+            const t = document.getElementById('toast');
+            t.innerText = msg; t.style.opacity = '1';
+            setTimeout(() => t.style.opacity = '0', 2000);
+        }
+
+        // --- 開支邏輯 ---
+        document.getElementById('expenseForm').onsubmit = (e) => {
+            e.preventDefault();
+            const newItem = {
+                id: Date.now(),
+                amount: parseFloat(document.getElementById('amount').value),
+                member: document.getElementById('member').value,
+                category: document.getElementById('category').value,
+                note: document.getElementById('note').value || '-',
+                date: new Date().toLocaleDateString('zh-HK')
+            };
+            state.expenses.unshift(newItem);
+            save(); renderAll(); e.target.reset();
+            showToast("已紀錄！別忘了去同步中心分享代碼");
+        };
+
+        // --- 存貨邏輯 ---
+        document.getElementById('inventoryForm').onsubmit = (e) => {
+            e.preventDefault();
+            const newItem = {
+                id: Date.now(),
+                name: document.getElementById('invName').value,
+                location: document.getElementById('invLoc').value,
+                qty: parseInt(document.getElementById('invQty').value)
+            };
+            state.inventory.unshift(newItem);
+            save(); renderAll(); e.target.reset();
+        };
+
+        window.updateQty = (id, delta) => {
+            const item = state.inventory.find(i => i.id === id);
+            if(item) { item.qty = Math.max(0, item.qty + delta); save(); renderAll(); }
+        };
+
+        window.delItem = (type, id) => {
+            state[type] = state[type].filter(x => x.id !== id);
+            save(); renderAll();
+        };
+
+        function save() {
+            localStorage.setItem('gulu_expenses', JSON.stringify(state.expenses));
+            localStorage.setItem('gulu_inventory', JSON.stringify(state.inventory));
+        }
+
+        // --- 同步功能 ---
+        window.generateSyncCode = () => {
+            const code = btoa(unescape(encodeURIComponent(JSON.stringify(state))));
+            document.getElementById('syncOutput').value = code;
+            navigator.clipboard.writeText(code);
+            showToast("代碼已複製到剪貼簿！");
+        };
+
+        window.importSyncCode = () => {
+            try {
+                const code = document.getElementById('syncInput').value;
+                const imported = JSON.parse(decodeURIComponent(escape(atob(code))));
+                if(imported.expenses && imported.inventory) {
+                    state = imported;
+                    save(); renderAll();
+                    showToast("同步成功！");
+                    document.getElementById('syncInput').value = "";
+                }
+            } catch(e) { alert("無效的同步代碼！"); }
+        };
+
+        // --- 匯出功能 ---
+        window.exportExcel = (type) => {
+            const data = type === 'expense' ? state.expenses : state.inventory;
+            const ws = XLSX.utils.json_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
+            XLSX.writeFile(wb, `${type}_data.xlsx`);
+        };
+
+        // --- 渲染 ---
+        function renderAll() {
+            renderExpenseTable();
+            renderInventory();
+            renderChart();
+            const total = state.expenses.reduce((s, i) => s + i.amount, 0);
+            document.getElementById('totalDisplay').innerText = `HK$ ${total.toLocaleString()}`;
+        }
+
+        function renderExpenseTable() {
+            const body = document.getElementById('expenseBody');
+            body.innerHTML = state.expenses.map(i => `
+                <tr class="border-b">
+                    <td class="py-2">${i.date}</td>
+                    <td class="font-bold text-gray-700">${i.member}</td>
+                    <td><span class="bg-indigo-50 text-indigo-600 px-2 rounded">${i.category}</span></td>
+                    <td class="text-right font-bold">$${i.amount}</td>
+                    <td class="text-center">
+                        <button onclick="delItem('expenses', ${i.id})" class="text-red-300">🗑️</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function renderInventory() {
+            const grid = document.getElementById('inventoryGrid');
+            grid.innerHTML = state.inventory.map(i => `
+                <div class="bg-gray-50 p-4 rounded-lg border">
+                    <div class="flex justify-between text-xs text-emerald-600 mb-1">
+                        <span>${i.location}</span>
+                        <button onclick="delItem('inventory', ${i.id})">❌</button>
+                    </div>
+                    <div class="font-bold text-lg">${i.name}</div>
+                    <div class="flex justify-between items-center mt-2">
+                        <span class="text-2xl font-black">${i.qty}</span>
+                        <div class="flex gap-2">
+                            <button onclick="updateQty(${i.id}, -1)" class="w-8 h-8 bg-white border rounded">-</button>
+                            <button onclick="updateQty(${i.id}, 1)" class="w-8 h-8 bg-emerald-50 text-emerald-600 border rounded">+</button>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function renderChart() {
+            const ctx = document.getElementById('expenseChart').getContext('2d');
+            const dataMap = {};
+            state.expenses.forEach(i => dataMap[i.category] = (dataMap[i.category] || 0) + i.amount);
+            if(chartObj) chartObj.destroy();
+            if(Object.keys(dataMap).length === 0) return;
+            chartObj = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: Object.keys(dataMap),
+                    datasets: [{ data: Object.values(dataMap), backgroundColor: ['#6366f1','#ec4899','#10b981','#f59e0b','#3b82f6','#ef4444'] }]
+                },
+                options: { plugins: { legend: { display: false } }, cutout: '70%' }
+            });
+        }
+    </script>
+</body>
+</html>
