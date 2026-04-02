@@ -12,6 +12,7 @@
             background-color: #1a1a1a;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             touch-action: none;
+            user-select: none;
         }
         canvas {
             display: block;
@@ -43,6 +44,37 @@
             display: none;
             z-index: 100;
         }
+        /* 虛擬按鍵樣式 */
+        .controls {
+            position: fixed;
+            bottom: 30px;
+            left: 0;
+            right: 0;
+            display: flex;
+            justify-content: space-between;
+            padding: 0 30px;
+            pointer-events: none;
+            z-index: 50;
+        }
+        .control-btn {
+            width: 70px;
+            height: 70px;
+            background: rgba(255, 255, 255, 0.3);
+            border: 2px solid rgba(255, 255, 255, 0.5);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 24px;
+            pointer-events: auto;
+            backdrop-filter: blur(5px);
+            touch-action: none;
+        }
+        .control-btn:active {
+            background: rgba(255, 255, 255, 0.5);
+            transform: scale(0.9);
+        }
     </style>
 </head>
 <body>
@@ -53,6 +85,15 @@
             <div class="text-xl">死亡次數: <span id="death-count">0</span></div>
         </div>
         <p class="mt-2 text-sm opacity-80">目標：跳過障礙，救出 A 子！</p>
+    </div>
+
+    <!-- 虛擬控制器 -->
+    <div class="controls" id="mobile-controls">
+        <div class="flex gap-4">
+            <div id="btn-left" class="control-btn">←</div>
+            <div id="btn-right" class="control-btn">→</div>
+        </div>
+        <div id="btn-jump" class="control-btn">跳</div>
     </div>
 
     <div id="game-modal" class="modal">
@@ -78,7 +119,7 @@
         let deaths = 0;
         let particles = [];
 
-        // Physics parameters
+        // 物理參數
         const gravity = 0.55;
         const friction = 0.8;
 
@@ -101,13 +142,13 @@
             grounded: false,
             color: '#FF69B4',
             draw() {
-                // Draw body
+                // 畫身體
                 ctx.fillStyle = this.color;
                 ctx.beginPath();
                 ctx.roundRect(this.x, this.y, this.width, this.height, 5);
                 ctx.fill();
 
-                // Draw hair
+                // 畫頭髮
                 ctx.fillStyle = '#4A3728';
                 ctx.beginPath();
                 ctx.moveTo(this.x - 2, this.y + 5);
@@ -116,18 +157,18 @@
                 ctx.quadraticCurveTo(this.x + this.width / 2, this.y - 12, this.x - 2, this.y - 5);
                 ctx.fill();
 
-                // Face
+                // 臉部
                 ctx.fillStyle = '#FFE4C4';
                 ctx.fillRect(this.x + 5, this.y + 5, this.width - 10, 15);
                 
-                // Eyes
+                // 眼睛
                 ctx.fillStyle = 'black';
                 ctx.fillRect(this.x + 8, this.y + 10, 3, 3);
                 ctx.fillRect(this.x + 20, this.y + 10, 3, 3);
             }
         };
 
-        const friend = { // This is A-ko (A子)
+        const friend = { // 這是 A 子
             x: 720,
             y: 500,
             width: 30,
@@ -258,33 +299,41 @@
         window.addEventListener('keydown', e => keys[e.code] = true);
         window.addEventListener('keyup', e => keys[e.code] = false);
 
-        // Touch support
-        window.addEventListener('touchstart', e => {
-            const touch = e.touches[0];
-            const x = touch.clientX;
-            const y = touch.clientY;
-            if (y < window.innerHeight / 2) {
-                if(player.grounded) player.vy = -player.jumpStrength;
-            } else {
-                if (x < window.innerWidth / 2) keys['ArrowLeft'] = true;
-                else keys['ArrowRight'] = true;
-            }
-        });
-        window.addEventListener('touchend', e => {
-            keys['ArrowLeft'] = false;
-            keys['ArrowRight'] = false;
-        });
+        // 虛擬鍵盤狀態
+        const mobileBtnState = {
+            left: false,
+            right: false,
+            jump: false
+        };
+
+        const setupControls = () => {
+            const btnLeft = document.getElementById('btn-left');
+            const btnRight = document.getElementById('btn-right');
+            const btnJump = document.getElementById('btn-jump');
+
+            const handlePointer = (btn, key, val) => {
+                btn.addEventListener('pointerdown', (e) => { e.preventDefault(); mobileBtnState[key] = val; });
+                btn.addEventListener('pointerup', (e) => { e.preventDefault(); mobileBtnState[key] = !val; });
+                btn.addEventListener('pointerleave', (e) => { e.preventDefault(); mobileBtnState[key] = !val; });
+            };
+
+            handlePointer(btnLeft, 'left', true);
+            handlePointer(btnRight, 'right', true);
+            handlePointer(btnJump, 'jump', true);
+        };
+
+        setupControls();
 
         function update() {
             if (gameState !== 'PLAYING') return;
 
-            // Player movement
-            if (keys['ArrowRight'] || keys['KeyD']) player.vx = player.speed;
-            else if (keys['ArrowLeft'] || keys['KeyA']) player.vx = -player.speed;
+            // 玩家移動 (結合實體與虛擬鍵盤)
+            if (keys['ArrowRight'] || keys['KeyD'] || mobileBtnState.right) player.vx = player.speed;
+            else if (keys['ArrowLeft'] || keys['KeyA'] || mobileBtnState.left) player.vx = -player.speed;
             else player.vx *= friction;
 
-            // Jump
-            if ((keys['ArrowUp'] || keys['KeyW'] || keys['Space']) && player.grounded) {
+            // 跳躍
+            if ((keys['ArrowUp'] || keys['KeyW'] || keys['Space'] || mobileBtnState.jump) && player.grounded) {
                 player.vy = -player.jumpStrength;
                 player.grounded = false;
             }
@@ -295,12 +344,12 @@
 
             player.grounded = false;
 
-            // Boundary check
+            // 邊界檢查
             if (player.x < 0) player.x = 0;
             if (player.x + player.width > canvas.width) player.x = canvas.width - player.width;
             if (player.y > canvas.height) die();
 
-            // Platform collision
+            // 平台碰撞
             platforms.forEach(p => {
                 if (p.moveX) {
                     p.currentOffset += p.speed * p.dir;
@@ -320,7 +369,7 @@
                         player.y = p.y - player.height;
                         player.vy = 0;
                         player.grounded = true;
-                        // Move with platform
+                        // 隨平台移動
                         if (p.moveX) player.x += p.speed * p.dir;
                         if (p.moveY) player.y += p.speed * p.dir;
                     }
@@ -329,14 +378,14 @@
                         player.vy = 0;
                     }
                     else {
-                        // Side collision
+                        // 側面碰撞
                         if (player.vx > 0) player.x = p.x - player.width;
                         if (player.vx < 0) player.x = p.x + p.w;
                     }
                 }
             });
 
-            // Hazard collision
+            // 障礙物碰撞
             hazards.forEach(h => {
                 if (h.moveX) {
                     h.currentOffset += h.speed * h.dir;
@@ -355,13 +404,13 @@
                 }
             });
 
-            // Reach exit
+            // 到達出口
             if (player.x < exit.x + exit.width && player.x + player.width > exit.x &&
                 player.y < exit.y + exit.height && player.y + player.height > exit.y) {
                 nextLevel();
             }
 
-            // Particles update
+            // 粒子更新
             particles.forEach((p, i) => {
                 p.x += p.vx;
                 p.y += p.vy;
@@ -409,13 +458,13 @@
         function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // Clouds
+            // 雲朵
             ctx.fillStyle = 'rgba(255,255,255,0.7)';
             ctx.beginPath(); ctx.arc(100, 100, 30, 0, Math.PI*2); ctx.fill();
             ctx.beginPath(); ctx.arc(130, 100, 40, 0, Math.PI*2); ctx.fill();
             ctx.beginPath(); ctx.arc(600, 150, 35, 0, Math.PI*2); ctx.fill();
 
-            // Platforms
+            // 平台
             platforms.forEach(p => {
                 ctx.fillStyle = '#4CAF50';
                 ctx.fillRect(p.x, p.y, p.w, p.h);
@@ -423,7 +472,7 @@
                 ctx.fillRect(p.x, p.y + 10, p.w, Math.max(0, p.h - 10));
             });
 
-            // Hazards
+            // 障礙物
             hazards.forEach(h => {
                 if (h.type === 'spike') {
                     ctx.fillStyle = '#708090';
@@ -444,7 +493,7 @@
                 }
             });
 
-            // Exit or Friend
+            // 出口或好友
             if (currentLevel < 10) {
                 ctx.fillStyle = 'rgba(0, 255, 0, 0.3)';
                 ctx.fillRect(exit.x, exit.y, exit.width, exit.height);
@@ -455,7 +504,7 @@
                 friend.draw();
             }
 
-            // Particles
+            // 粒子效果
             particles.forEach(p => {
                 ctx.globalAlpha = p.life;
                 ctx.fillStyle = p.color;
