@@ -2,288 +2,489 @@
 <html lang="zh-Hant">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>日常管家 - 穩定同步版</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>少女救友大冒險</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap');
-        body { font-family: 'Noto Sans TC', sans-serif; background-color: #f3f4f6; }
-        .glass-card { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border-radius: 1rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
-        .nav-btn.active { background-color: #4f46e5; color: white; }
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #1a1a1a;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            touch-action: none;
+        }
+        canvas {
+            display: block;
+            margin: 0 auto;
+            background: linear-gradient(to bottom, #87CEEB, #E0F6FF);
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            max-width: 100%;
+            max-height: 100vh;
+        }
+        #ui-layer {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+            pointer-events: none;
+            width: calc(100% - 40px);
+        }
+        .modal {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            text-align: center;
+            box-shadow: 0 0 50px rgba(0,0,0,0.5);
+            display: none;
+            z-index: 100;
+        }
     </style>
 </head>
-<body class="p-4 md:p-8">
-    <div class="max-w-5xl mx-auto">
-        <header class="mb-6 text-center">
-            <h1 class="text-3xl font-bold text-indigo-600">日常管家系統</h1>
-            <p class="text-gray-500">穩定使用版 (A子, B子, GULU)</p>
-        </header>
+<body>
 
-        <!-- 導航列 -->
-        <div class="flex justify-center mb-8 gap-2 flex-wrap">
-            <button onclick="switchTab('expense')" id="btn-expense" class="nav-btn active px-5 py-2 rounded-full transition font-medium">💰 開支</button>
-            <button onclick="switchTab('inventory')" id="btn-inventory" class="nav-btn px-5 py-2 rounded-full bg-white transition font-medium">📦 存貨</button>
-            <button onclick="switchTab('sync')" id="btn-sync" class="nav-btn px-5 py-2 rounded-full bg-white transition font-medium">🔄 同步中心</button>
+    <div id="ui-layer">
+        <div class="flex justify-between items-center">
+            <h1 class="text-2xl font-bold">第 <span id="level-num">1</span> / 10 關</h1>
+            <div class="text-xl">死亡次數: <span id="death-count">0</span></div>
         </div>
-
-        <!-- 1. 開支分頁 -->
-        <div id="tab-expense" class="tab-content">
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div class="lg:col-span-1 glass-card p-6 h-fit">
-                    <h2 class="text-xl font-semibold mb-4">新增支出</h2>
-                    <form id="expenseForm" class="space-y-4">
-                        <input type="number" id="amount" required step="0.1" class="w-full p-2 border rounded-md" placeholder="金額 (HKD)">
-                        <select id="member" class="w-full p-2 border rounded-md">
-                            <option value="A子">👤 A子</option>
-                            <option value="B子">👤 B子</option>
-                            <option value="GULU">🐾 GULU</option>
-                        </select>
-                        <select id="category" class="w-full p-2 border rounded-md">
-                            <option value="餐飲">🍔 餐飲</option><option value="交通">🚌 交通</option>
-                            <option value="購物">🛍️ 購物</option><option value="Facial">🧖‍♀️ Facial</option>
-                            <option value="Gym">💪 Gym</option><option value="股票">📈 股票</option>
-                            <option value="其他">✨ 其他</option>
-                        </select>
-                        <input type="text" id="note" class="w-full p-2 border rounded-md" placeholder="備註">
-                        <button type="submit" class="w-full bg-indigo-600 text-white py-2 rounded-md hover:bg-indigo-700">紀錄支出</button>
-                    </form>
-                </div>
-                <div class="lg:col-span-2 space-y-6">
-                    <div class="glass-card p-6 flex flex-col md:flex-row items-center gap-6">
-                        <div class="w-full md:w-1/2 h-48"><canvas id="expenseChart"></canvas></div>
-                        <div class="w-full md:w-1/2 text-center md:text-left">
-                            <p class="text-sm text-gray-500">本月總開支</p>
-                            <p id="totalDisplay" class="text-3xl font-bold text-indigo-600">HK$ 0</p>
-                            <div id="memberSummary" class="mt-2 text-xs italic text-gray-500"></div>
-                        </div>
-                    </div>
-                    <div class="glass-card p-6">
-                        <div class="flex justify-between items-center mb-4">
-                            <h2 class="font-bold">歷史紀錄</h2>
-                            <button onclick="exportExcel('expense')" class="text-xs bg-indigo-50 text-indigo-600 px-3 py-1 rounded-md border">匯出 Excel</button>
-                        </div>
-                        <div class="overflow-x-auto text-sm">
-                            <table class="w-full text-left">
-                                <tbody id="expenseBody"></tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- 2. 存貨分頁 -->
-        <div id="tab-inventory" class="tab-content hidden">
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div class="lg:col-span-1 glass-card p-6 h-fit">
-                    <h2 class="text-xl font-semibold mb-4">新增存貨</h2>
-                    <form id="inventoryForm" class="space-y-4">
-                        <input type="text" id="invName" required class="w-full p-2 border rounded-md" placeholder="物品名稱">
-                        <select id="invLoc" class="w-full p-2 border rounded-md">
-                            <option value="廚房">🍳 廚房</option><option value="浴室">🚿 浴室</option>
-                            <option value="雪櫃">❄️ 雪櫃</option><option value="儲物櫃">🚪 儲物櫃</option>
-                        </select>
-                        <input type="number" id="invQty" required class="w-full p-2 border rounded-md" placeholder="數量">
-                        <button type="submit" class="w-full bg-emerald-600 text-white py-2 rounded-md hover:bg-emerald-700">加入存貨</button>
-                    </form>
-                </div>
-                <div class="lg:col-span-2 glass-card p-6">
-                    <div class="flex justify-between items-center mb-4">
-                        <h2 class="font-bold">存貨明細</h2>
-                        <button onclick="exportExcel('inventory')" class="text-xs bg-emerald-50 text-emerald-600 px-3 py-1 rounded-md border">匯出 Excel</button>
-                    </div>
-                    <div id="inventoryGrid" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
-                </div>
-            </div>
-        </div>
-
-        <!-- 3. 同步中心分頁 -->
-        <div id="tab-sync" class="tab-content hidden">
-            <div class="glass-card p-8 max-w-2xl mx-auto text-center">
-                <h2 class="text-2xl font-bold mb-4 text-indigo-600">🔄 家園同步中心</h2>
-                <p class="text-gray-600 mb-6 text-sm">因為這不是正式 App，如果您要在 A子、B子的手機間同步資料，請使用以下代碼：</p>
-                
-                <div class="space-y-6">
-                    <div class="p-4 bg-gray-50 rounded-lg">
-                        <h3 class="font-bold mb-2">步驟 1：輸出資料 (分享給家人)</h3>
-                        <button onclick="generateSyncCode()" class="bg-indigo-600 text-white px-6 py-2 rounded-md mb-2">產生同步代碼</button>
-                        <textarea id="syncOutput" readonly class="w-full h-24 p-2 text-xs border rounded-md bg-white mb-2" placeholder="產生的代碼會出現在這裡..."></textarea>
-                        <p class="text-xs text-gray-400">產生後複製這段代碼，傳送到家人的 WhatsApp 紀錄即可。</p>
-                    </div>
-
-                    <div class="p-4 bg-gray-50 rounded-lg">
-                        <h3 class="font-bold mb-2">步驟 2：匯入資料 (接收紀錄)</h3>
-                        <textarea id="syncInput" class="w-full h-24 p-2 text-xs border rounded-md bg-white mb-2" placeholder="請將家人傳給您的代碼貼在這裡..."></textarea>
-                        <button onclick="importSyncCode()" class="bg-emerald-600 text-white px-6 py-2 rounded-md">匯入並更新紀錄</button>
-                    </div>
-                </div>
-            </div>
-        </div>
+        <p class="mt-2 text-sm opacity-80">目標：跳過障礙，救出 A 子！</p>
     </div>
 
-    <div id="toast" class="fixed bottom-10 left-1/2 -translate-x-1/2 bg-gray-800 text-white px-6 py-2 rounded-full opacity-0 transition-opacity"></div>
+    <div id="game-modal" class="modal">
+        <h2 id="modal-title" class="text-3xl font-bold mb-4">遊戲開始</h2>
+        <p id="modal-desc" class="mb-6 text-gray-600">A 子被困在深處了，快去救她吧！</p>
+        <button id="modal-btn" class="bg-blue-500 hover:bg-blue-600 text-white px-8 py-3 rounded-full font-bold transition">開始冒險</button>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
 
     <script>
-        // 核心數據
-        let state = {
-            expenses: JSON.parse(localStorage.getItem('gulu_expenses')) || [],
-            inventory: JSON.parse(localStorage.getItem('gulu_inventory')) || []
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const levelNumDisplay = document.getElementById('level-num');
+        const deathDisplay = document.getElementById('death-count');
+        const modal = document.getElementById('game-modal');
+        const modalTitle = document.getElementById('modal-title');
+        const modalDesc = document.getElementById('modal-desc');
+        const modalBtn = document.getElementById('modal-btn');
+
+        let gameState = 'START';
+        let currentLevel = 1;
+        let deaths = 0;
+        let particles = [];
+
+        // Physics parameters
+        const gravity = 0.55;
+        const friction = 0.8;
+
+        function resize() {
+            canvas.width = 800;
+            canvas.height = 600;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        const player = {
+            x: 50,
+            y: 500,
+            width: 30,
+            height: 45,
+            vx: 0,
+            vy: 0,
+            speed: 5.5,
+            jumpStrength: 12.5,
+            grounded: false,
+            color: '#FF69B4',
+            draw() {
+                // Draw body
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.roundRect(this.x, this.y, this.width, this.height, 5);
+                ctx.fill();
+
+                // Draw hair
+                ctx.fillStyle = '#4A3728';
+                ctx.beginPath();
+                ctx.moveTo(this.x - 2, this.y + 5);
+                ctx.lineTo(this.x + this.width + 2, this.y + 5);
+                ctx.lineTo(this.x + this.width + 2, this.y - 5);
+                ctx.quadraticCurveTo(this.x + this.width / 2, this.y - 12, this.x - 2, this.y - 5);
+                ctx.fill();
+
+                // Face
+                ctx.fillStyle = '#FFE4C4';
+                ctx.fillRect(this.x + 5, this.y + 5, this.width - 10, 15);
+                
+                // Eyes
+                ctx.fillStyle = 'black';
+                ctx.fillRect(this.x + 8, this.y + 10, 3, 3);
+                ctx.fillRect(this.x + 20, this.y + 10, 3, 3);
+            }
         };
 
-        let chartObj = null;
+        const friend = { // This is A-ko (A子)
+            x: 720,
+            y: 500,
+            width: 30,
+            height: 45,
+            draw() {
+                ctx.fillStyle = '#9370DB';
+                ctx.beginPath();
+                ctx.roundRect(this.x, this.y, this.width, this.height, 5);
+                ctx.fill();
 
-        window.onload = () => renderAll();
+                ctx.fillStyle = '#654321';
+                ctx.beginPath();
+                ctx.moveTo(this.x - 3, this.y + 20);
+                ctx.lineTo(this.x + this.width + 3, this.y + 20);
+                ctx.lineTo(this.x + this.width + 3, this.y - 5);
+                ctx.quadraticCurveTo(this.x + this.width / 2, this.y - 15, this.x - 3, this.y - 5);
+                ctx.fill();
 
-        function switchTab(tab) {
-            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
-            document.getElementById(`tab-${tab}`).classList.remove('hidden');
-            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active', 'bg-indigo-600', 'text-white'));
-            const activeBtn = document.getElementById(`btn-${tab}`);
-            activeBtn.classList.add('active', 'bg-indigo-600', 'text-white');
-            if(tab === 'expense') renderChart();
+                ctx.fillStyle = '#FFE4C4';
+                ctx.fillRect(this.x + 5, this.y + 5, this.width - 10, 15);
+            }
+        };
+
+        let platforms = [];
+        let hazards = [];
+        let exit = { x: 750, y: 500, width: 40, height: 60 };
+
+        function loadLevel(num) {
+            platforms = [];
+            hazards = [];
+            player.x = 30;
+            player.y = 450;
+            player.vx = 0;
+            player.vy = 0;
+            exit.x = 750;
+            exit.y = 500;
+            levelNumDisplay.innerText = num;
+
+            switch(num) {
+                case 1: 
+                    platforms.push({ x: 0, y: 560, w: 150, h: 40 });
+                    platforms.push({ x: 250, y: 450, w: 120, h: 20 });
+                    platforms.push({ x: 450, y: 350, w: 120, h: 20 });
+                    platforms.push({ x: 650, y: 350, w: 150, h: 250 });
+                    exit.y = 290;
+                    break;
+                case 2: 
+                    platforms.push({ x: 0, y: 560, w: 100, h: 40 });
+                    platforms.push({ x: 150, y: 440, w: 150, h: 20 });
+                    platforms.push({ x: 380, y: 350, w: 150, h: 20 });
+                    platforms.push({ x: 600, y: 440, w: 200, h: 160 });
+                    exit.y = 380;
+                    for(let i=0; i<15; i++) {
+                        hazards.push({ type: 'spike', x: 100 + i*35, y: 540, w: 30, h: 20 });
+                    }
+                    break;
+                case 3:
+                    platforms.push({ x: 0, y: 560, w: 120, h: 40 });
+                    platforms.push({ x: 180, y: 460, w: 100, h: 20 });
+                    platforms.push({ x: 350, y: 400, w: 120, h: 20, moveX: 120, speed: 2, currentOffset: 0, dir: 1 });
+                    platforms.push({ x: 650, y: 340, w: 150, h: 280 });
+                    exit.y = 280;
+                    break;
+                case 4: 
+                    platforms.push({ x: 0, y: 560, w: 150, h: 40 });
+                    platforms.push({ x: 250, y: 350, w: 300, h: 20, moveY: 150, speed: 1.5, currentOffset: 0, dir: 1 });
+                    platforms.push({ x: 650, y: 560, w: 150, h: 40 });
+                    for(let i=0; i<12; i++) {
+                        hazards.push({ type: 'spike', x: 160 + i*40, y: 540, w: 30, h: 20 });
+                    }
+                    platforms.push({ x: 600, y: 400, w: 30, h: 200 }); 
+                    exit.y = 500;
+                    break;
+                case 5:
+                    platforms.push({ x: 0, y: 560, w: 100, h: 40 });
+                    platforms.push({ x: 100, y: 470, w: 100, h: 20 });
+                    platforms.push({ x: 250, y: 380, w: 100, h: 20 });
+                    platforms.push({ x: 100, y: 290, w: 100, h: 20 });
+                    platforms.push({ x: 250, y: 200, w: 100, h: 20 });
+                    platforms.push({ x: 450, y: 200, w: 100, h: 20 });
+                    platforms.push({ x: 650, y: 200, w: 120, h: 20 });
+                    exit.y = 140;
+                    break;
+                case 6:
+                    platforms.push({ x: 0, y: 560, w: 100, h: 40 });
+                    platforms.push({ x: 100, y: 480, w: 150, h: 20 });
+                    platforms.push({ x: 300, y: 380, w: 150, h: 20 });
+                    platforms.push({ x: 500, y: 280, w: 200, h: 20 });
+                    hazards.push({ type: 'enemy', x: 550, y: 240, w: 40, h: 40, moveX: 100, speed: 2.5, currentOffset: 0, dir: 1 });
+                    exit.y = 220;
+                    break;
+                case 7:
+                    platforms = [{ x: 0, y: 560, w: 100, h: 40 }];
+                    platforms.push({ x: 220, y: 460, w: 80, h: 20 });
+                    platforms.push({ x: 420, y: 460, w: 80, h: 20 });
+                    platforms.push({ x: 620, y: 460, w: 80, h: 20 });
+                    platforms.push({ x: 750, y: 560, w: 50, h: 40 });
+                    break;
+                case 8:
+                    platforms.push({ x: 0, y: 560, w: 100, h: 40 });
+                    platforms.push({ x: 100, y: 460, w: 600, h: 20 });
+                    hazards.push({ type: 'spike', x: 250, y: 460, w: 30, h: 20 });
+                    hazards.push({ type: 'enemy', x: 450, y: 150, w: 40, h: 40, moveY: 250, speed: 4, currentOffset: 0, dir: 1 });
+                    platforms.push({ x: 700, y: 560, w: 100, h: 40 });
+                    break;
+                case 9:
+                    platforms.push({ x: 0, y: 560, w: 100, h: 40 });
+                    platforms.push({ x: 50, y: 460, w: 700, h: 20 });
+                    for(let i=0; i<10; i++) {
+                        hazards.push({ type: 'spike', x: 150 + i*60, y: 460, w: 20, h: 20 });
+                    }
+                    hazards.push({ type: 'enemy', x: 100, y: 380, w: 30, h: 30, moveX: 600, speed: 6, currentOffset: 0, dir: 1 });
+                    platforms.push({ x: 750, y: 560, w: 50, h: 40 });
+                    break;
+                case 10:
+                    platforms.push({ x: 0, y: 560, w: 200, h: 40 });
+                    platforms.push({ x: 200, y: 420, w: 400, h: 20 });
+                    platforms.push({ x: 600, y: 560, w: 200, h: 40 });
+                    hazards.push({ type: 'enemy', x: 300, y: 380, w: 40, h: 40, moveX: 200, speed: 3, currentOffset: 0, dir: 1 });
+                    friend.x = 720;
+                    friend.y = 515;
+                    exit.x = 720;
+                    break;
+            }
         }
 
-        function showToast(msg) {
-            const t = document.getElementById('toast');
-            t.innerText = msg; t.style.opacity = '1';
-            setTimeout(() => t.style.opacity = '0', 2000);
-        }
+        const keys = {};
+        window.addEventListener('keydown', e => keys[e.code] = true);
+        window.addEventListener('keyup', e => keys[e.code] = false);
 
-        // --- 開支邏輯 ---
-        document.getElementById('expenseForm').onsubmit = (e) => {
-            e.preventDefault();
-            const newItem = {
-                id: Date.now(),
-                amount: parseFloat(document.getElementById('amount').value),
-                member: document.getElementById('member').value,
-                category: document.getElementById('category').value,
-                note: document.getElementById('note').value || '-',
-                date: new Date().toLocaleDateString('zh-HK')
-            };
-            state.expenses.unshift(newItem);
-            save(); renderAll(); e.target.reset();
-            showToast("已紀錄！別忘了去同步中心分享代碼");
-        };
+        // Touch support
+        window.addEventListener('touchstart', e => {
+            const touch = e.touches[0];
+            const x = touch.clientX;
+            const y = touch.clientY;
+            if (y < window.innerHeight / 2) {
+                if(player.grounded) player.vy = -player.jumpStrength;
+            } else {
+                if (x < window.innerWidth / 2) keys['ArrowLeft'] = true;
+                else keys['ArrowRight'] = true;
+            }
+        });
+        window.addEventListener('touchend', e => {
+            keys['ArrowLeft'] = false;
+            keys['ArrowRight'] = false;
+        });
 
-        // --- 存貨邏輯 ---
-        document.getElementById('inventoryForm').onsubmit = (e) => {
-            e.preventDefault();
-            const newItem = {
-                id: Date.now(),
-                name: document.getElementById('invName').value,
-                location: document.getElementById('invLoc').value,
-                qty: parseInt(document.getElementById('invQty').value)
-            };
-            state.inventory.unshift(newItem);
-            save(); renderAll(); e.target.reset();
-        };
+        function update() {
+            if (gameState !== 'PLAYING') return;
 
-        window.updateQty = (id, delta) => {
-            const item = state.inventory.find(i => i.id === id);
-            if(item) { item.qty = Math.max(0, item.qty + delta); save(); renderAll(); }
-        };
+            // Player movement
+            if (keys['ArrowRight'] || keys['KeyD']) player.vx = player.speed;
+            else if (keys['ArrowLeft'] || keys['KeyA']) player.vx = -player.speed;
+            else player.vx *= friction;
 
-        window.delItem = (type, id) => {
-            state[type] = state[type].filter(x => x.id !== id);
-            save(); renderAll();
-        };
+            // Jump
+            if ((keys['ArrowUp'] || keys['KeyW'] || keys['Space']) && player.grounded) {
+                player.vy = -player.jumpStrength;
+                player.grounded = false;
+            }
 
-        function save() {
-            localStorage.setItem('gulu_expenses', JSON.stringify(state.expenses));
-            localStorage.setItem('gulu_inventory', JSON.stringify(state.inventory));
-        }
+            player.vy += gravity;
+            player.x += player.vx;
+            player.y += player.vy;
 
-        // --- 同步功能 ---
-        window.generateSyncCode = () => {
-            const code = btoa(unescape(encodeURIComponent(JSON.stringify(state))));
-            document.getElementById('syncOutput').value = code;
-            navigator.clipboard.writeText(code);
-            showToast("代碼已複製到剪貼簿！");
-        };
+            player.grounded = false;
 
-        window.importSyncCode = () => {
-            try {
-                const code = document.getElementById('syncInput').value;
-                const imported = JSON.parse(decodeURIComponent(escape(atob(code))));
-                if(imported.expenses && imported.inventory) {
-                    state = imported;
-                    save(); renderAll();
-                    showToast("同步成功！");
-                    document.getElementById('syncInput').value = "";
+            // Boundary check
+            if (player.x < 0) player.x = 0;
+            if (player.x + player.width > canvas.width) player.x = canvas.width - player.width;
+            if (player.y > canvas.height) die();
+
+            // Platform collision
+            platforms.forEach(p => {
+                if (p.moveX) {
+                    p.currentOffset += p.speed * p.dir;
+                    if (Math.abs(p.currentOffset) > p.moveX) p.dir *= -1;
+                    p.x += p.speed * p.dir;
                 }
-            } catch(e) { alert("無效的同步代碼！"); }
-        };
+                if (p.moveY) {
+                    p.currentOffset += p.speed * p.dir;
+                    if (Math.abs(p.currentOffset) > p.moveY) p.dir *= -1;
+                    p.y += p.speed * p.dir;
+                }
 
-        // --- 匯出功能 ---
-        window.exportExcel = (type) => {
-            const data = type === 'expense' ? state.expenses : state.inventory;
-            const ws = XLSX.utils.json_to_sheet(data);
-            const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
-            XLSX.writeFile(wb, `${type}_data.xlsx`);
-        };
+                if (player.x < p.x + p.w && player.x + player.width > p.x &&
+                    player.y < p.y + p.h && player.y + player.height > p.y) {
+                    
+                    if (player.vy >= 0 && player.y + player.height - player.vy <= p.y + 5) {
+                        player.y = p.y - player.height;
+                        player.vy = 0;
+                        player.grounded = true;
+                        // Move with platform
+                        if (p.moveX) player.x += p.speed * p.dir;
+                        if (p.moveY) player.y += p.speed * p.dir;
+                    }
+                    else if (player.vy < 0 && player.y - player.vy >= p.y + p.h - 5) {
+                        player.y = p.y + p.h;
+                        player.vy = 0;
+                    }
+                    else {
+                        // Side collision
+                        if (player.vx > 0) player.x = p.x - player.width;
+                        if (player.vx < 0) player.x = p.x + p.w;
+                    }
+                }
+            });
 
-        // --- 渲染 ---
-        function renderAll() {
-            renderExpenseTable();
-            renderInventory();
-            renderChart();
-            const total = state.expenses.reduce((s, i) => s + i.amount, 0);
-            document.getElementById('totalDisplay').innerText = `HK$ ${total.toLocaleString()}`;
-        }
+            // Hazard collision
+            hazards.forEach(h => {
+                if (h.moveX) {
+                    h.currentOffset += h.speed * h.dir;
+                    if (Math.abs(h.currentOffset) > h.moveX) h.dir *= -1;
+                    h.x += h.speed * h.dir;
+                }
+                if (h.moveY) {
+                    h.currentOffset += h.speed * h.dir;
+                    if (Math.abs(h.currentOffset) > h.moveY) h.dir *= -1;
+                    h.y += h.speed * h.dir;
+                }
 
-        function renderExpenseTable() {
-            const body = document.getElementById('expenseBody');
-            body.innerHTML = state.expenses.map(i => `
-                <tr class="border-b">
-                    <td class="py-2">${i.date}</td>
-                    <td class="font-bold text-gray-700">${i.member}</td>
-                    <td><span class="bg-indigo-50 text-indigo-600 px-2 rounded">${i.category}</span></td>
-                    <td class="text-right font-bold">$${i.amount}</td>
-                    <td class="text-center">
-                        <button onclick="delItem('expenses', ${i.id})" class="text-red-300">🗑️</button>
-                    </td>
-                </tr>
-            `).join('');
-        }
+                if (player.x < h.x + h.w && player.x + player.width > h.x &&
+                    player.y < h.y + h.h && player.y + player.height > h.y) {
+                    die();
+                }
+            });
 
-        function renderInventory() {
-            const grid = document.getElementById('inventoryGrid');
-            grid.innerHTML = state.inventory.map(i => `
-                <div class="bg-gray-50 p-4 rounded-lg border">
-                    <div class="flex justify-between text-xs text-emerald-600 mb-1">
-                        <span>${i.location}</span>
-                        <button onclick="delItem('inventory', ${i.id})">❌</button>
-                    </div>
-                    <div class="font-bold text-lg">${i.name}</div>
-                    <div class="flex justify-between items-center mt-2">
-                        <span class="text-2xl font-black">${i.qty}</span>
-                        <div class="flex gap-2">
-                            <button onclick="updateQty(${i.id}, -1)" class="w-8 h-8 bg-white border rounded">-</button>
-                            <button onclick="updateQty(${i.id}, 1)" class="w-8 h-8 bg-emerald-50 text-emerald-600 border rounded">+</button>
-                        </div>
-                    </div>
-                </div>
-            `).join('');
-        }
+            // Reach exit
+            if (player.x < exit.x + exit.width && player.x + player.width > exit.x &&
+                player.y < exit.y + exit.height && player.y + player.height > exit.y) {
+                nextLevel();
+            }
 
-        function renderChart() {
-            const ctx = document.getElementById('expenseChart').getContext('2d');
-            const dataMap = {};
-            state.expenses.forEach(i => dataMap[i.category] = (dataMap[i.category] || 0) + i.amount);
-            if(chartObj) chartObj.destroy();
-            if(Object.keys(dataMap).length === 0) return;
-            chartObj = new Chart(ctx, {
-                type: 'doughnut',
-                data: {
-                    labels: Object.keys(dataMap),
-                    datasets: [{ data: Object.values(dataMap), backgroundColor: ['#6366f1','#ec4899','#10b981','#f59e0b','#3b82f6','#ef4444'] }]
-                },
-                options: { plugins: { legend: { display: false } }, cutout: '70%' }
+            // Particles update
+            particles.forEach((p, i) => {
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life -= 0.02;
+                if (p.life <= 0) particles.splice(i, 1);
             });
         }
+
+        function die() {
+            deaths++;
+            deathDisplay.innerText = deaths;
+            createExplosion(player.x + player.width/2, player.y + player.height/2, player.color);
+            loadLevel(currentLevel);
+        }
+
+        function createExplosion(x, y, color) {
+            for(let i=0; i<15; i++) {
+                particles.push({
+                    x, y,
+                    vx: (Math.random() - 0.5) * 10,
+                    vy: (Math.random() - 0.5) * 10,
+                    life: 1,
+                    color
+                });
+            }
+        }
+
+        function nextLevel() {
+            if (currentLevel < 10) {
+                currentLevel++;
+                loadLevel(currentLevel);
+            } else {
+                winGame();
+            }
+        }
+
+        function winGame() {
+            gameState = 'WIN';
+            modalTitle.innerText = "成功救出 A 子！";
+            modalDesc.innerHTML = `太棒了！妳成功克服了所有障礙。<br>死亡總數：${deaths} 次。<br>現在可以帶 A 子回家了！`;
+            modalBtn.innerText = "重新冒險";
+            modal.style.display = 'block';
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Clouds
+            ctx.fillStyle = 'rgba(255,255,255,0.7)';
+            ctx.beginPath(); ctx.arc(100, 100, 30, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(130, 100, 40, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(600, 150, 35, 0, Math.PI*2); ctx.fill();
+
+            // Platforms
+            platforms.forEach(p => {
+                ctx.fillStyle = '#4CAF50';
+                ctx.fillRect(p.x, p.y, p.w, p.h);
+                ctx.fillStyle = '#8B4513';
+                ctx.fillRect(p.x, p.y + 10, p.w, Math.max(0, p.h - 10));
+            });
+
+            // Hazards
+            hazards.forEach(h => {
+                if (h.type === 'spike') {
+                    ctx.fillStyle = '#708090';
+                    ctx.beginPath();
+                    ctx.moveTo(h.x, h.y + h.h);
+                    ctx.lineTo(h.x + h.w/2, h.y);
+                    ctx.lineTo(h.x + h.w, h.y + h.h);
+                    ctx.fill();
+                } else if (h.type === 'enemy') {
+                    ctx.fillStyle = '#FF4500';
+                    ctx.fillRect(h.x, h.y, h.w, h.h);
+                    ctx.fillStyle = 'white';
+                    ctx.fillRect(h.x + 5, h.y + 10, 10, 10);
+                    ctx.fillRect(h.x + 25, h.y + 10, 10, 10);
+                    ctx.fillStyle = 'black';
+                    ctx.fillRect(h.x + 8, h.y + 13, 4, 4);
+                    ctx.fillRect(h.x + 28, h.y + 13, 4, 4);
+                }
+            });
+
+            // Exit or Friend
+            if (currentLevel < 10) {
+                ctx.fillStyle = 'rgba(0, 255, 0, 0.3)';
+                ctx.fillRect(exit.x, exit.y, exit.width, exit.height);
+                ctx.strokeStyle = 'green';
+                ctx.lineWidth = 3;
+                ctx.strokeRect(exit.x, exit.y, exit.width, exit.height);
+            } else {
+                friend.draw();
+            }
+
+            // Particles
+            particles.forEach(p => {
+                ctx.globalAlpha = p.life;
+                ctx.fillStyle = p.color;
+                ctx.fillRect(p.x, p.y, 5, 5);
+            });
+            ctx.globalAlpha = 1;
+
+            player.draw();
+
+            requestAnimationFrame(() => {
+                update();
+                draw();
+            });
+        }
+
+        modalBtn.onclick = () => {
+            if (gameState === 'WIN') {
+                currentLevel = 1;
+                deaths = 0;
+                deathDisplay.innerText = 0;
+            }
+            modal.style.display = 'none';
+            gameState = 'PLAYING';
+            loadLevel(currentLevel);
+        };
+
+        modal.style.display = 'block';
+        loadLevel(1);
+        draw();
     </script>
 </body>
 </html>
